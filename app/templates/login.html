@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Войти</h1>
+<form action="" method="post">
+    {{ form.hidden_tag() }}
+    <div>
+        <div>
+            {{ form.username.label }}
+        </div>
+        <div>
+            {{ form.username(size=32) }}
+        </div>
+        {% for error in form.username.errors %}
+        <div style="color: red">
+            {{ error }}
+        </div>
+        {% endfor %}
+    </div>
+    <div>
+        <div>
+            {{ form.password.label }}
+        </div>
+        <div>
+            {{ form.password(size=32) }}
+        </div>
+        {% for error in form.password.errors %}
+        <div style="color: red">
+            {{ error }}
+        </div>
+        {% endfor %}
+    </div>
+    <div>{{ form.remember_me() }} {{ form.remember_me.label }}</div>
+    <div>{{ form.submit() }}</div>
+</form>
+{% endblock %}

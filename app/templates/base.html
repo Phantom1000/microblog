@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    {% if title %}
+    <title>{{ title }} - Блог</title>
+    {% else %}
+    <title>Добро пожаловать - Блог</title>
+    {% endif %}
+</head>
+<body>
+<div>
+    Блог:
+    <a href="{{ url_for('index') }}">Главная</a>
+    <a href="{{ url_for('login') }}">Войти</a>
+</div>
+<hr>
+{% with messages = get_flashed_messages() %}
+{% if messages %}
+<ul>
+    {% for message in messages %}
+    <li>{{ message }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+{% endwith %}
+{% block content %}{% endblock %}
+</body>
+</html>
