@@ -158,3 +158,5 @@ cython_debug/
 
 microblog.log*
 app.db
+cert.pem
+key.pem

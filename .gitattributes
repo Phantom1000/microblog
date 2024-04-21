@@ -1,4 +1,2 @@
 * text=auto
 *.sh text eol=lf
-cert.pem
-key.pem
