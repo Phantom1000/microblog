@@ -1,9 +1,9 @@
-from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField, SubmitField
 from wtforms.validators import DataRequired, ValidationError, Email, EqualTo
-import sqlalchemy as sa
+from flask_wtf import FlaskForm
 from app import db
-from app.models import User
+from app.models.user import User
+import sqlalchemy as sa
 
 
 class LoginForm(FlaskForm):
@@ -29,3 +29,14 @@ class RegistrationForm(FlaskForm):
         user = db.session.scalar(sa.select(User).where(User.email == email.data))
         if user is not None:
             raise ValidationError('Пользователь с таким email уже существует')
+
+
+class ResetPasswordRequestForm(FlaskForm):
+    email = StringField('Email', validators=[DataRequired(), Email()])
+    submit = SubmitField('Сбросить пароль')
+
+
+class ResetPasswordForm(FlaskForm):
+    password = PasswordField('Пароль', validators=[DataRequired()])
+    password_confirm = PasswordField('Повторите пароль', validators=[DataRequired(), EqualTo('password')])
+    submit = SubmitField('Сохранить')

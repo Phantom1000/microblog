@@ -1,12 +1,10 @@
-from app import app, db
+from app import create_app, db
 import sqlalchemy as sa
 import sqlalchemy.orm as so
-from app.models import User, Post
+from app.models.user import User
+from app.models.post import Post
 
-
-# from dotenv import load_dotenv
-#
-# load_dotenv()
+app = create_app()
 
 
 @app.shell_context_processor
@@ -15,4 +13,5 @@ def make_shell_context():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, ssl_context=('cert.pem', 'key.pem'))
+    # app.run(ssl_context=('cert.pem', 'key.pem'))
+    app.run()
