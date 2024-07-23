@@ -160,3 +160,6 @@ microblog.log*
 app.db
 certs
 logs
+
+docker.sh
+Dockerfile2
