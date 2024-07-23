@@ -9,25 +9,19 @@ load_dotenv(os.path.join(basedir, '.env'))
 
 
 class BaseConfig:
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'secret'
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///' + os.path.join(basedir, 'app.db')
-    MAIL_SERVER = os.environ.get('MAIL_SERVER') or 'localhost'
+    SECRET_KEY = os.environ.get('SECRET_KEY', 'secret')
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'app.db')
+    MAIL_SERVER = os.environ.get('MAIL_SERVER', 'localhost')
     MAIL_PORT = int(os.environ.get('MAIL_PORT') or 8025)
     MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS') is not None
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
     ADMINS = ['develop.nikita@yandex.ru']
     TRANSLATOR_KEY = os.environ.get('TRANSLATOR_KEY')
-    # CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL')
-    # CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND')
-    CELERY = dict(
-        broker_url="redis://localhost",
-        result_backend="redis://localhost",
-        task_ignore_result=True,
-    ),
     POSTS_PER_PAGE = 5
     LANGUAGES = ['ru', 'en']
-    ELASTICSEARCH_URL = os.environ.get('ELASTICSEARCH_URL')
+    REDIS_URL = os.environ.get('REDIS_URL', "redis://localhost")
+    ELASTICSEARCH_URL = os.environ.get('ELASTICSEARCH_URL', 'http://localhost:9200')
 
     @staticmethod
     def init_app(app):
@@ -37,15 +31,17 @@ class BaseConfig:
 class TestConfig(BaseConfig):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = 'sqlite://'
+    ELASTICSEARCH_URL = None
 
 
 class DevelopmentConfig(BaseConfig):
     DEBUG = True
+    # SQLALCHEMY_ECHO = True
 
 
 class ProductionConfig(BaseConfig):
     DEBUG = False
-    SQLALCHEMY_ECHO = True
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
 
     @classmethod
     def init_app(cls, app):
@@ -79,9 +75,12 @@ class ProductionConfig(BaseConfig):
             app.logger.info('Блог запущен')
 
 
-config = {
-    "development": DevelopmentConfig,
-    "production": ProductionConfig,
-    "test": TestConfig,
-    "default": ProductionConfig,
-}
+def get_config_class():
+    config = {
+        "development": DevelopmentConfig,
+        "production": ProductionConfig,
+        "test": TestConfig,
+        "default": ProductionConfig,
+    }
+    config_class = os.environ.get('CONFIG', 'default')
+    return config[config_class]

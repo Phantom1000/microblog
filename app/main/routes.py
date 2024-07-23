@@ -1,11 +1,15 @@
+from celery.result import AsyncResult
+
 from app import db
 from flask import request, render_template, flash, redirect, url_for, g, current_app as app
-from app.main.forms import EditProfileForm, EmptyForm, PostForm, SearchForm
+from app.main.forms import EditProfileForm, EmptyForm, PostForm, SearchForm, MessageForm
 
 from flask_login import current_user, login_required
 import sqlalchemy as sa
 from app.models.user import User
 from app.models.post import Post
+from app.models.message import Message
+from app.models.notification import Notification
 
 from datetime import datetime, timezone
 from langdetect import detect, LangDetectException
@@ -14,10 +18,10 @@ from flask_babel import get_locale
 from app.main import bp
 import sqlalchemy.orm as so
 from celery import shared_task
-from celery.result import AsyncResult
+from app.tasks import export_posts_task
 
 
-@bp.before_request
+@bp.before_app_request
 def before_request():
     if current_user.is_authenticated:
         current_user.last_seen = datetime.now(timezone.utc)
@@ -67,7 +71,7 @@ def explore():
 
 @bp.route('/user/<username>')
 @login_required
-def user(username):
+def user(username: str):
     user = db.first_or_404(sa.select(User).filter_by(username=username))
     page = request.args.get('page', 1, type=int)
     query = user.posts.select().order_by(Post.timestamp.desc())
@@ -97,7 +101,7 @@ def edit_profile():
 
 @bp.route('/follow/<username>', methods=['POST'])
 @login_required
-def follow(username):
+def follow(username: str):
     form = EmptyForm()
     if form.validate_on_submit():
         user = db.session.scalar(
@@ -119,7 +123,7 @@ def follow(username):
 
 @bp.route('/unfollow/<username>', methods=['POST'])
 @login_required
-def unfollow(username):
+def unfollow(username: str):
     form = EmptyForm()
     if form.validate_on_submit():
         user = db.session.scalar(
@@ -159,27 +163,76 @@ def search():
     return render_template('search.html', title='Поиск', posts=posts, next_url=next_url, prev_url=prev_url)
 
 
-@shared_task(ignore_result=False)
-def add_together(a: int, b: int) -> int:
-    with app.app_context():
-        return a + b
+@bp.route("/user/<username>/popup")
+@login_required
+def user_popup(username: str):
+    user = db.first_or_404(sa.select(User).filter_by(username=username))
+    form = EmptyForm()
+    return render_template('user_popup.html', user=user, form=form)
 
 
-@bp.post("/add")
-def start_add() -> dict[str, object]:
-    a = request.form.get("a", type=int)
-    b = request.form.get("b", type=int)
-    result = add_together.delay(a, b)
-    return {
-        "result_id": result.id
+@bp.route('/send_message/<recipient>', methods=('GET', 'POST'))
+@login_required
+def send_message(recipient):
+    user = db.first_or_404(sa.select(User).filter_by(username=recipient))
+    form = MessageForm()
+    if form.validate_on_submit():
+        msg = Message(author=current_user, recipient=user, body=form.message.data)
+        db.session.add(msg)
+        user.add_notification('unread_message_count', user.unread_message_count())
+        db.session.commit()
+        flash('Сообщение отправлено')
+        return redirect(url_for('main.user', username=recipient))
+    return render_template('send_message.html', title='Отправить сообщение', form=form, recipient=recipient)
+
+
+@bp.route('/messages')
+@login_required
+def messages():
+    current_user.last_message_read_time = datetime.now(timezone.utc)
+    current_user.add_notification('unread_message_count', 0)
+    db.session.commit()
+    page = request.args.get('page', 1, type=int)
+    query = current_user.messages_received.select().order_by(Message.timestamp.desc())
+    messages = db.paginate(query, page=page, per_page=app.config['POSTS_PER_PAGE'], error_out=False)
+    next_url = url_for('main.messages', page=messages.next_num) if messages.has_next else None
+    prev_url = url_for('main.messages', page=messages.prev_num) if messages.has_prev else None
+    return render_template('messages.html', messages=messages.items, next_url=next_url, prev_url=prev_url)
+
+
+@bp.route('/notifications')
+@login_required
+def notifications():
+    since = request.args.get('since', 0.0, type=float)
+    query = current_user.notifications.select().where(Notification.timestamp > since).order_by(
+        Notification.timestamp.asc())
+    notifications = db.session.scalars(query)
+    return [{
+        'name': notification.name,
+        'data': notification.get_data(),
+        'timestamp': notification.timestamp
+    } for notification in notifications]
+
+
+@bp.get("/export_posts")
+@login_required
+def export_posts():
+    if current_user.get_task_in_progress('app.tasks.export_posts_task'):
+        flash('Экспорт постов уже запущен')
+    else:
+        task = current_user.launch_task(export_posts_task, "Экспорт постов...")
+        return redirect(url_for('main.user', username=current_user.username, task_id=task.id))
+    return redirect(url_for('main.user', username=current_user.username))
+
+
+@bp.route("/task_status/<task_id>")
+def task_status(task_id):
+    task = AsyncResult(task_id)
+    response = {
+        "ready": task.ready(),
+        "successful": task.successful(),
+        "progress": 0
     }
-
-
-@bp.get("/result/<id>")
-def task_result(id: str) -> dict[str, object]:
-    result = AsyncResult(id)
-    return {
-        "ready": result.ready(),
-        "successful": result.successful(),
-        "value": result.result if result.ready() else None,
-    }
+    if task.status == 'PROGRESS' or task.status == 'SUCCESS':
+        response['progress'] = task.info.get("progress"),
+    return response

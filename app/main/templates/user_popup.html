@@ -1,0 +1,27 @@
+<div>
+    <img src="{{ user.avatar(64) }}" style="margin: 5px; float: left">
+    <p>
+        <a href="{{ url_for('main.user', username=user.username) }}">{{ user.username }}</a>
+    </p>
+    {% if user.about_me %}<p>{{ user.about_me }}</p>{% endif %}
+    <div class="clearfix"></div>
+    {% if user.last_seen %}<p>Последний раз заходил: {{ moment(user.last_seen).format('LLL') }}</p>{% endif %}
+    <div>{{ user.followers_count() }} подписчиков, {{ user.following_count() }} подписок.</div>
+    {% if user != current_user %}
+        {% if not current_user.is_following(user) %}
+        <div>
+            <form action="{{ url_for('main.follow', username=user.username) }}" method="post">
+                {{ form.hidden_tag() }}
+                {{ form.submit(value='Подписаться', class_='btn btn-outline-primary btn-sm') }}
+            </form>
+        </div>
+        {% else %}
+        <div>
+            <form action="{{ url_for('main.unfollow', username=user.username) }}" method="post">
+                {{ form.hidden_tag() }}
+                {{ form.submit(value='Отписаться', class_='btn btn-outline-primary btn-sm') }}
+            </form>
+        </div>
+        {% endif %}
+    {% endif %}
+</div>

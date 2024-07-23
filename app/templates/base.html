@@ -18,7 +18,8 @@
 <nav class="navbar navbar-expand-lg bg-body-tertiary">
     <div class="container">
         <a class="navbar-brand" href="{{ url_for('main.index') }}">Блог</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Переключатель навигации">
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent"
+                aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Переключатель навигации">
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarSupportedContent">
@@ -29,6 +30,13 @@
                 <li class="nav-item">
                     <a class="nav-link" aria-current="page" href="{{ url_for('main.explore') }}">Все записи</a>
                 </li>
+                {% if g.search_form %}
+                <form class="navbar-form navbar-left" method="get" action="{{ url_for('main.search') }}">
+                    <div class="form-group">
+                        {{ g.search_form.q(size=20, class='form-control', placeholder=g.search_form.q.label.text) }}
+                    </div>
+                </form>
+                {% endif %}
             </ul>
             <ul class="navbar-nav mb-2 mb-lg-0">
                 {% if current_user.is_anonymous %}
@@ -37,24 +45,40 @@
                 </li>
                 {% else %}
                 <li class="nav-item">
-                    <a class="nav-link" aria-current="page" href="{{ url_for('main.user', username=current_user.username) }}">Профиль</a>
+                    <a class="nav-link" aria-current="page"
+                       href="{{ url_for('main.user', username=current_user.username) }}">Профиль</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" aria-current="page" href="{{ url_for('main.messages') }}">
+                        Сообщения
+                        {% set unread_message_count = current_user.unread_message_count() %}
+                        <span id="message_count" class="badge text-bg-danger"
+                              style="visibility: {% if unread_message_count %}visible{% else %}hidden{% endif %};">
+                            {{ unread_message_count }}
+                        </span>
+                    </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" aria-current="page" href="{{ url_for('auth.logout') }}">Выйти</a>
                 </li>
                 {% endif %}
             </ul>
-            {% if g.search_form %}
-            <form class="navbar-form navbar-left" method="get" action="{{ url_for('main.search') }}">
-                <div class="form-group">
-                    {{ g.search_form.q(size=20, class='form-control', placeholder=g.search_form.q.label.text) }}
-                </div>
-            </form>
-            {% endif %}
         </div>
     </div>
 </nav>
 <div class="container mt-3">
+    {% if current_user.is_authenticated %}
+    {% with tasks = current_user.get_tasks_in_progress() %}
+    {% if tasks %}
+    {% for task in tasks %}
+    <div class="alert alert-success" role="alert">
+        {{ task.description }}
+        <span id="{{ task.id }}-progress">{{ task.get_progress() }}</span>%
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
+    {% endif %}
     {% with messages = get_flashed_messages() %}
     {% if messages %}
     {% for message in messages %}
@@ -72,7 +96,7 @@
 {{ moment.include_moment() }}
 {{ moment.lang(g.locale) }}
 <script>
-    async function translate(sourceElem, destElem, sourceLang, destLang) {
+    const translate = async (sourceElem, destElem, sourceLang, destLang) => {
         document.getElementById(destElem).innerHTML = '<img src="{{ url_for('static', filename='loading.gif') }}">';
         const response = await fetch('/translate', {
             method: 'POST',
@@ -86,6 +110,67 @@
         const data = await response.json();
         document.getElementById(destElem).innerText = data.text;
     }
+
+    const initialize_popovers = () => {
+        const popups = document.getElementsByClassName('user_popup');
+        for (let i = 0; i < popups.length; i++) {
+            const popover = new bootstrap.Popover(popups[i], {
+                content: 'Загрузка...',
+                trigger: 'hover focus',
+                placement: 'right',
+                html: true,
+                sanitize: false,
+                delay: {show: 500, hide: 0},
+                container: popups[i],
+                customClass: 'd-inline',
+            });
+            popups[i].addEventListener('show.bs.popover', async (ev) => {
+                if (ev.target.popupLoaded) {
+                    return;
+                }
+                const response = await fetch('/user/' + ev.target.innerText.trim() + '/popup');
+                const data = await response.text();
+                const popover = bootstrap.Popover.getInstance(ev.target);
+                if (popover && data) {
+                    ev.target.popupLoaded = true;
+                    popover.setContent({'.popover-body': data});
+                    flask_moment_render_all();
+                }
+            });
+       }
+    }
+    document.addEventListener('DOMContentLoaded', initialize_popovers);
+    const set_message_count = (n) => {
+      const count = document.getElementById('message_count');
+      count.innerText = n;
+      count.style.visibility = n ? 'visible' : 'hidden';
+    }
+    const set_task_progress = (task_id, progress) => {
+        const progressElement = document.getElementById(task_id + '-progress');
+        if (progressElement) {
+            progressElement.innerText = progress;
+        }
+    }
+    {% if current_user.is_authenticated %}
+    document.addEventListener('DOMContentLoaded', () => {
+        let since = 0;
+        setInterval(async () => {
+            const response = await fetch('{{ url_for('main.notifications') }}?since=' + since);
+            const notifications = await response.json()
+            for (let notification of notifications) {
+                switch (notification.name) {
+                    case 'unread_message_count':
+                        set_message_count(notification.data);
+                        break;
+                    case 'task_progress':
+                        set_task_progress(notification.data.task_id, notification.data.progress);
+                        break;
+                }
+                since = notification.timestamp;
+            }
+        }, 10000);
+    })
+    {% endif %}
 </script>
 </body>
 </html>

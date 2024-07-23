@@ -1,0 +1,56 @@
+version: "1.1"
+
+services:
+  web:
+    container_name: blog
+    build: .
+    restart: always
+    ports:
+      - 8000:5000
+    environment:
+     - VIRTUAL_HOST=microblog-app.ru
+    volumes:
+      - .:/blog
+    working_dir: /blog
+    command: ["./boot.sh"]
+
+  worker:
+    container_name: blog-worker
+    build: .
+    restart: always
+    volumes:
+      - .:/blog
+    working_dir: /blog
+    command: [ "./celery.sh" ]
+
+  db:
+    container_name: blog-db
+    image: postgres:latest
+    restart: always
+    environment:
+      POSTGRES_DB: 'microblog'
+      POSTGRES_USER: 'admin'
+      POSTGRES_PASSWORD: '094c87c0b131473aa30f9e9b41029b83'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  es:
+    image: elasticsearch:8.14.1
+    container_name: blog-es
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    mem_limit: 2GB
+    ports:
+      - 9200:9200
+
+  redis:
+    image: redis:latest
+    container_name: blog-redis
+    restart: always
+    ports:
+      - 6379:6379
+
+volumes:
+  pgdata:
